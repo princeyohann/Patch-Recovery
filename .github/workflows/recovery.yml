@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       RECOVERY_URL:
-        description: 'RECOVERY URL (Direct link from Catbox or Oshi.at)'
+        description: 'RECOVERY URL'
         required: true
         default: ''
 
@@ -21,28 +21,37 @@ jobs:
         sudo apt update
         sudo apt install git wget lz4 tar openssl python3 -y
 
-    - name: Fetch image from URL
+    - name: Fetch and Rename Image
       run: |
-        # On télécharge et on force le nom en recovery.img pour que les scripts le trouvent
-        wget -O recovery.img "${{ github.event.inputs.RECOVERY_URL }}"
-        if [ ! -f recovery.img ]; then echo "Erreur: Téléchargement échoué"; exit 1; fi
+        # Les scripts cherchent apparemment "r.img" dans le dossier ou le dossier parent
+        wget -O r.img "${{ github.event.inputs.RECOVERY_URL }}"
+        # On crée une copie nommée recovery.img au cas où
+        cp r.img recovery.img
+        if [ ! -f r.img ]; then echo "Erreur téléchargement"; exit 1; fi
 
     - name: Patch Process-1
       run: |
         chmod a+x script1.sh
         chmod a+x magiskboot
-        # On lance le patch. Si script1 attend recovery.img, il le trouvera maintenant.
-        ./script1.sh || echo "Script 1 a continué malgré une alerte"
+        # Correction du bug "No such file or directory (os error 2)" 
+        # en plaçant r.img là où il est attendu
+        ./script1.sh || echo "Continuer..."
 
     - name: Patch Process-2
       run: |
         chmod a+x script2.sh
-        # On s'assure que le script 2 a bien généré recovery-patched.img
-        ./script2.sh || echo "Script 2 a continué malgré une alerte"
+        # On lance le script 2
+        ./script2.sh || echo "Continuer..."
         
-        # Vérification de sécurité avant avbtool
+        # Tentative de secours : si recovery-patched.img n'existe pas, 
+        # on vérifie si Magiskboot a généré "new-boot.img"
+        if [ ! -f recovery-patched.img ] && [ -f new-boot.img ]; then
+           mv new-boot.img recovery-patched.img
+        fi
+
         if [ ! -f recovery-patched.img ]; then
-          echo "ERREUR: Le fichier recovery-patched.img n'a pas été créé par les scripts."
+          echo "ERREUR CRITIQUE : L'image n'a pas pu être patchée."
+          echo "Vérifiez que votre recovery.img est bien une image Samsung brute."
           exit 1
         fi
 
