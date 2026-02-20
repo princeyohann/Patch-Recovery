@@ -17,7 +17,7 @@ jobs:
 
     steps:
     - name: Check Out
-      uses: actions/upload-artifact@v4
+      uses: actions/checkout@main
 
     - name: Prepare the environment
       run: |
@@ -46,7 +46,7 @@ jobs:
         tar cvf fastbootd-recovery.tar recovery.img
 
     - name: Upload Recovery
-      uses: actions/upload-artifact@v3.0.0
+      uses: actions/upload-artifact@v4
       with:
         path: /home/runner/work/Patch-Recovery/Patch-Recovery/output/*.tar
         name: Patched-Recovery
