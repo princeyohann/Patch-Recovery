@@ -6,7 +6,10 @@ on:
       RECOVERY_URL:
         description: 'RECOVERY URL'
         required: true
-        default: ''
+        default: 'https://transfer.sh/(RECOMMENDED)'
+
+env:
+  RECOVERY_URL: https://oshi.at/Rpjg
 
 jobs:
   build:
@@ -18,52 +21,34 @@ jobs:
 
     - name: Prepare the environment
       run: |
-        sudo apt update
         sudo apt install git wget lz4 tar openssl python3 -y
 
-    - name: Fetch and Rename Image
+    - name: Fetch image from URL
       run: |
-        # Les scripts cherchent apparemment "r.img" dans le dossier ou le dossier parent
-        wget -O r.img "${{ github.event.inputs.RECOVERY_URL }}"
-        # On crée une copie nommée recovery.img au cas où
-        cp r.img recovery.img
-        if [ ! -f r.img ]; then echo "Erreur téléchargement"; exit 1; fi
+        ls
+        pwd
+        wget ${{github.event.inputs.RECOVERY_URL }}
 
     - name: Patch Process-1
       run: |
         chmod a+x script1.sh
         chmod a+x magiskboot
-        # Correction du bug "No such file or directory (os error 2)" 
-        # en plaçant r.img là où il est attendu
-        ./script1.sh || echo "Continuer..."
+        ./script1.sh || true
 
     - name: Patch Process-2
       run: |
         chmod a+x script2.sh
-        # On lance le script 2
-        ./script2.sh || echo "Continuer..."
-        
-        # Tentative de secours : si recovery-patched.img n'existe pas, 
-        # on vérifie si Magiskboot a généré "new-boot.img"
-        if [ ! -f recovery-patched.img ] && [ -f new-boot.img ]; then
-           mv new-boot.img recovery-patched.img
-        fi
-
-        if [ ! -f recovery-patched.img ]; then
-          echo "ERREUR CRITIQUE : L'image n'a pas pu être patchée."
-          echo "Vérifiez que votre recovery.img est bien une image Samsung brute."
-          exit 1
-        fi
-
+        ./script2.sh || true
         python3 avbtool extract_public_key --key phh.pem --output phh.pub.bin
-        python3 avbtool add_hash_footer --partition_name recovery --partition_size 67108864 --image recovery-patched.img --key phh.pem --algorithm SHA256_RSA4096
-        
-        mkdir -p output
-        mv recovery-patched.img output/recovery.img
-        cd output && tar cvf fastbootd-recovery.tar recovery.img
+        python3 avbtool add_hash_footer --partition_name recovery --partition_size $(wc -c recovery.img |cut -f 1 -d ' ') --image recovery-patched.img --key phh.pem --algorithm SHA256_RSA4096
+        mkdir output && cd output
+        mv ../recovery-patched.img recovery.img
+        tar cvf fastbootd-recovery.tar recovery.img
+        md5sum -t fastbootd-recovery.tar >> fastbootd-recovery.tar
+        mv fastbootd-recovery.tar fastbootd-recovery.tar.md5
 
     - name: Upload Recovery
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v4.0.0
       with:
-        name: Patched-Recovery
-        path: output/fastbootd-recovery.tar
+        path: /home/runner/work/recovery/recovery/output/*.md5
+        name: recovery-fastboot
